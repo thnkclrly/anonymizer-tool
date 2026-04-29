@@ -148,6 +148,53 @@ const REGEX_PATTERNS = [
     description: "Postal code + city",
   },
 
+  // ── Employee initials (5 uppercase letters) ──
+  // TODO: Refine exclusion list over time — monitor for false positives/negatives.
+  //       Consider lowercase detection if a reliable heuristic emerges.
+  {
+    regex: /\b[A-Z]{5}\b/g,  // case-sensitive: no 'i' flag
+    category: "EMPLOYEE_ID",
+    description: "Employee initials",
+    validate: (match) => {
+      const EXCLUDE = new Set([
+        "HTTPS", "BASIC", "CHINA", "JAPAN", "INDIA", "EMAIL",
+        "ADMIN", "ALERT", "AUDIT", "BOARD", "BREAK", "BUILD",
+        "CHECK", "CLASS", "CLEAR", "CLICK", "CLOSE", "COUNT",
+        "DEBUG", "DRAFT", "DRIVE", "ERROR", "EVENT", "EXTRA",
+        "FINAL", "FIRST", "FLASH", "FLOAT", "FOCUS", "FORCE",
+        "FOUND", "FRAME", "FRONT", "GOING", "GRAND", "GRANT",
+        "GREEN", "GROUP", "GUARD", "GUEST", "GUIDE", "HELLO",
+        "HOUSE", "IMAGE", "INDEX", "INNER", "INPUT", "INTER",
+        "LARGE", "LATER", "LAYER", "LEVEL", "LIGHT", "LIMIT",
+        "LOCAL", "LOGIN", "LOWER", "MACRO", "MATCH", "MEDIA",
+        "MERGE", "MINOR", "MODEL", "MONTH", "NEVER", "NORTH",
+        "NOTED", "OFFER", "ORDER", "OTHER", "OUTER", "PANEL",
+        "PARSE", "PATCH", "PHASE", "PHONE", "PHOTO", "PLACE",
+        "PLAIN", "PLANT", "PLATE", "POINT", "PRESS", "PRICE",
+        "PRIME", "PRINT", "PRIOR", "PROOF", "PROXY", "QUERY",
+        "QUEUE", "QUICK", "QUIET", "QUOTE", "RADIO", "RAISE",
+        "RANGE", "RAPID", "REACH", "READY", "REFER", "REPLY",
+        "RIGHT", "ROUND", "ROUTE", "ROYAL", "RURAL", "SCALE",
+        "SCENE", "SCORE", "SHARE", "SHIFT", "SHORT", "SIGMA",
+        "SINCE", "SMALL", "SMART", "SOLID", "SOLVE", "SOUTH",
+        "SPACE", "SPLIT", "STACK", "STAFF", "STAGE", "START",
+        "STATE", "STEAM", "STEEL", "STILL", "STOCK", "STORE",
+        "STORM", "STORY", "STRIP", "STUDY", "STYLE", "SUPER",
+        "SWEET", "TABLE", "TAKEN", "THEME", "THINK", "THREE",
+        "TIMER", "TITLE", "TODAY", "TOKEN", "TOTAL", "TOUCH",
+        "TRACE", "TRACK", "TRADE", "TRAIN", "TREND", "TRIAL",
+        "TRIED", "TRUCK", "TRULY", "TRUST", "ULTRA", "UNDER",
+        "UNION", "UNITE", "UNITY", "UNTIL", "UPPER", "URBAN",
+        "USAGE", "USING", "USUAL", "VALID", "VALUE", "VIDEO",
+        "VISIT", "VITAL", "VOICE", "WATCH", "WATER", "WHEEL",
+        "WHERE", "WHICH", "WHILE", "WHITE", "WHOLE", "WHOSE",
+        "WORLD", "WORST", "WORTH", "WOULD", "WRITE", "WRONG",
+        "YOUNG",
+      ]);
+      return !EXCLUDE.has(match);
+    },
+  },
+
   // ── URLs (http/https) ──
   {
     regex: /https?:\/\/[^\s<>"{}|\\^`\[\]]+/g,
@@ -181,6 +228,7 @@ const CATEGORY_CONFIG = {
   INTERNAL_TOOL:    { color: "#a3e635", bgColor: "rgba(163, 230, 53, 0.15)",  icon: "🔧", label: "Internal Tools" },
   PRICING_TIER:     { color: "#fcd34d", bgColor: "rgba(252, 211, 77, 0.15)",  icon: "💰", label: "Pricing Tiers" },
   INTERNAL_TEAM:    { color: "#67e8f9", bgColor: "rgba(103, 232, 249, 0.15)", icon: "👥", label: "Internal Teams" },
+  EMPLOYEE_ID:      { color: "#f0abfc", bgColor: "rgba(240, 171, 252, 0.15)", icon: "🔖", label: "Employee IDs" },
 
   // Aggressive mode catch-all
   UNKNOWN_ENTITY:   { color: "#94a3b8", bgColor: "rgba(148, 163, 184, 0.15)", icon: "❓", label: "Unknown Entities" },
