@@ -1,0 +1,445 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Client-side text anonymizer — scrub PII and sensitive data before pasting into AI tools. All processing happens in your browser.">
+  <title>Text Anonymizer — Scrub Sensitive Data</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    /* ─── Reset & Base ─────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg-primary: #0a0e1a;
+      --bg-secondary: #111827;
+      --bg-surface: #1a2035;
+      --bg-surface-hover: #1f2a45;
+      --bg-glass: rgba(26, 32, 53, 0.7);
+      --border: rgba(255, 255, 255, 0.06);
+      --border-focus: rgba(99, 102, 241, 0.5);
+      --text-primary: #f1f5f9;
+      --text-secondary: #94a3b8;
+      --text-muted: #64748b;
+      --accent: #6366f1;
+      --accent-glow: rgba(99, 102, 241, 0.25);
+      --success: #22c55e;
+      --danger: #ef4444;
+      --radius: 12px;
+      --radius-sm: 8px;
+      --shadow: 0 4px 24px rgba(0, 0, 0, 0.3);
+      --transition: 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    html { font-size: 15px; }
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+    /* Animated background gradient */
+    body::before {
+      content: '';
+      position: fixed; inset: 0;
+      background:
+        radial-gradient(ellipse at 20% 0%, rgba(99, 102, 241, 0.08) 0%, transparent 60%),
+        radial-gradient(ellipse at 80% 100%, rgba(168, 85, 247, 0.06) 0%, transparent 60%);
+      pointer-events: none; z-index: 0;
+    }
+
+    /* ─── Layout ───────────────────────────────────────────── */
+    .app { position: relative; z-index: 1; max-width: 1400px; margin: 0 auto; padding: 20px 24px 40px; }
+
+    /* ─── Header ───────────────────────────────────────────── */
+    .header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 16px 0 20px; border-bottom: 1px solid var(--border); margin-bottom: 20px;
+    }
+    .header-left { display: flex; align-items: center; gap: 14px; }
+    .logo {
+      width: 42px; height: 42px; border-radius: 10px;
+      background: linear-gradient(135deg, var(--accent), #a855f7);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 20px; box-shadow: 0 0 20px var(--accent-glow);
+    }
+    .header-title { font-size: 1.35rem; font-weight: 700; letter-spacing: -0.02em; }
+    .header-subtitle { font-size: 0.8rem; color: var(--text-muted); margin-top: 2px; }
+    .trust-badge {
+      display: flex; align-items: center; gap: 8px;
+      padding: 8px 14px; border-radius: 20px;
+      background: rgba(34, 197, 94, 0.08); border: 1px solid rgba(34, 197, 94, 0.2);
+      font-size: 0.78rem; color: var(--success); font-weight: 500;
+    }
+    .trust-dot {
+      width: 7px; height: 7px; border-radius: 50%; background: var(--success);
+      animation: pulse-dot 2s ease-in-out infinite;
+    }
+    @keyframes pulse-dot {
+      0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.4); }
+      50% { opacity: 0.7; box-shadow: 0 0 0 6px rgba(34, 197, 94, 0); }
+    }
+
+    /* ─── Toolbar ──────────────────────────────────────────── */
+    .toolbar {
+      display: flex; align-items: center; justify-content: space-between;
+      gap: 12px; margin-bottom: 16px; flex-wrap: wrap;
+    }
+    .toolbar-left, .toolbar-right { display: flex; align-items: center; gap: 10px; }
+    .toggle-group {
+      display: flex; align-items: center; gap: 8px;
+      padding: 6px 12px; border-radius: var(--radius-sm);
+      background: var(--bg-surface); border: 1px solid var(--border);
+      font-size: 0.8rem; color: var(--text-secondary);
+    }
+    .toggle-switch {
+      position: relative; width: 36px; height: 20px; cursor: pointer;
+    }
+    .toggle-switch input { opacity: 0; width: 0; height: 0; }
+    .toggle-slider {
+      position: absolute; inset: 0; border-radius: 10px;
+      background: var(--bg-primary); border: 1px solid var(--border);
+      transition: var(--transition);
+    }
+    .toggle-slider::before {
+      content: ''; position: absolute; width: 14px; height: 14px;
+      left: 2px; top: 50%; transform: translateY(-50%);
+      border-radius: 50%; background: var(--text-muted); transition: var(--transition);
+    }
+    .toggle-switch input:checked + .toggle-slider {
+      background: var(--accent); border-color: var(--accent);
+    }
+    .toggle-switch input:checked + .toggle-slider::before {
+      transform: translateY(-50%) translateX(16px); background: white;
+    }
+    .char-count { font-size: 0.75rem; color: var(--text-muted); font-family: 'JetBrains Mono', monospace; }
+
+    /* ─── Editor Panes ─────────────────────────────────────── */
+    .editor-grid {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px;
+    }
+    @media (max-width: 860px) { .editor-grid { grid-template-columns: 1fr; } }
+    .pane {
+      background: var(--bg-glass); backdrop-filter: blur(16px);
+      border: 1px solid var(--border); border-radius: var(--radius);
+      display: flex; flex-direction: column; min-height: 380px;
+      box-shadow: var(--shadow); transition: border-color var(--transition);
+    }
+    .pane:focus-within { border-color: var(--border-focus); }
+    .pane-header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 12px 16px; border-bottom: 1px solid var(--border);
+      font-size: 0.78rem; font-weight: 600; text-transform: uppercase;
+      letter-spacing: 0.05em; color: var(--text-muted);
+    }
+    .pane-header-icon { margin-right: 8px; }
+    .pane-body { flex: 1; position: relative; }
+    #input-text {
+      width: 100%; height: 100%; min-height: 320px; padding: 16px;
+      background: transparent; border: none; resize: vertical;
+      font-family: 'JetBrains Mono', monospace; font-size: 0.88rem;
+      line-height: 1.65; color: var(--text-primary); outline: none;
+    }
+    #input-text::placeholder { color: var(--text-muted); }
+    #output-display {
+      padding: 16px; font-family: 'JetBrains Mono', monospace;
+      font-size: 0.88rem; line-height: 1.65; white-space: pre-wrap;
+      word-break: break-word; display: none; overflow-y: auto; max-height: 500px;
+    }
+    #output-placeholder {
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      height: 100%; min-height: 320px; color: var(--text-muted);
+      font-size: 0.85rem; gap: 10px; text-align: center; padding: 20px;
+    }
+    .placeholder-icon { font-size: 2.5rem; opacity: 0.4; }
+
+    /* ─── Entity Badges ────────────────────────────────────── */
+    .entity-badge {
+      display: inline; padding: 2px 7px; border-radius: 4px;
+      font-weight: 600; font-size: 0.82rem;
+      color: var(--entity-color); background: var(--entity-bg);
+      border: 1px solid var(--entity-color);
+      cursor: help; transition: all var(--transition);
+      border-bottom-width: 2px;
+    }
+    .entity-badge:hover {
+      filter: brightness(1.3); transform: translateY(-1px);
+    }
+
+    /* ─── Tooltip ───────────────────────────────────────────── */
+    .entity-tooltip {
+      position: fixed; z-index: 1000; padding: 10px 14px;
+      background: var(--bg-surface); border: 1px solid var(--border);
+      border-radius: var(--radius-sm); box-shadow: var(--shadow);
+      font-size: 0.78rem; pointer-events: none;
+      opacity: 0; transition: opacity 0.15s ease;
+    }
+    .entity-tooltip.visible { opacity: 1; }
+    .tooltip-header { font-weight: 600; margin-bottom: 4px; }
+    .tooltip-original, .tooltip-replacement { color: var(--text-secondary); line-height: 1.5; }
+    .tooltip-original strong, .tooltip-replacement strong { color: var(--text-primary); }
+
+    /* ─── Action Buttons ───────────────────────────────────── */
+    .actions {
+      display: flex; align-items: center; justify-content: space-between;
+      gap: 12px; margin-bottom: 16px; flex-wrap: wrap;
+    }
+    .actions-left, .actions-right { display: flex; gap: 10px; }
+    .btn {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 10px 20px; border-radius: var(--radius-sm);
+      font-family: 'Inter', sans-serif; font-size: 0.85rem; font-weight: 600;
+      border: 1px solid var(--border); cursor: pointer;
+      transition: all var(--transition); outline: none;
+    }
+    .btn-primary {
+      background: linear-gradient(135deg, var(--accent), #8b5cf6);
+      color: white; border-color: transparent;
+      box-shadow: 0 2px 12px var(--accent-glow);
+    }
+    .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 4px 20px var(--accent-glow); filter: brightness(1.1); }
+    .btn-primary:active { transform: translateY(0); }
+    .btn-primary.processing { opacity: 0.7; pointer-events: none; }
+    .btn-secondary {
+      background: var(--bg-surface); color: var(--text-primary);
+    }
+    .btn-secondary:hover { background: var(--bg-surface-hover); border-color: var(--border-focus); }
+    .btn-secondary:disabled { opacity: 0.4; cursor: not-allowed; pointer-events: none; }
+    .btn-copy.copied { border-color: var(--success); color: var(--success); }
+    .btn-danger { color: var(--danger); }
+    .btn-danger:hover { background: rgba(239, 68, 68, 0.1); border-color: rgba(239, 68, 68, 0.3); }
+    .kbd {
+      font-size: 0.65rem; padding: 2px 5px; border-radius: 4px;
+      background: var(--bg-primary); border: 1px solid var(--border);
+      color: var(--text-muted); font-family: 'JetBrains Mono', monospace;
+    }
+
+    /* ─── Stats Bar ────────────────────────────────────────── */
+    .stats-section {
+      background: var(--bg-glass); backdrop-filter: blur(16px);
+      border: 1px solid var(--border); border-radius: var(--radius);
+      padding: 14px 16px; margin-bottom: 16px;
+    }
+    .stats-section-title {
+      font-size: 0.72rem; font-weight: 600; text-transform: uppercase;
+      letter-spacing: 0.06em; color: var(--text-muted); margin-bottom: 10px;
+    }
+    #stats-bar {
+      display: flex; flex-wrap: wrap; gap: 8px; min-height: 34px; align-items: center;
+    }
+    .stat-pill {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 5px 12px; border-radius: 20px;
+      background: var(--pill-bg, var(--bg-surface));
+      border: 1px solid color-mix(in srgb, var(--pill-color, var(--text-muted)) 25%, transparent);
+      font-size: 0.78rem; color: var(--pill-color, var(--text-secondary));
+      animation: fadeIn 0.3s ease;
+    }
+    .stat-total {
+      background: rgba(99, 102, 241, 0.1);
+      border-color: rgba(99, 102, 241, 0.25);
+      color: var(--accent); font-weight: 700;
+    }
+    .stat-count { font-weight: 700; font-family: 'JetBrains Mono', monospace; }
+    .stat-label { font-weight: 500; }
+    .stat-empty { color: var(--text-muted); font-size: 0.82rem; font-style: italic; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+
+    /* ─── Entity Map ───────────────────────────────────────── */
+    .entity-map {
+      background: var(--bg-glass); backdrop-filter: blur(16px);
+      border: 1px solid var(--border); border-radius: var(--radius);
+      overflow: hidden;
+    }
+    .entity-map-header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 12px 16px; cursor: pointer; user-select: none;
+      transition: background var(--transition);
+    }
+    .entity-map-header:hover { background: var(--bg-surface-hover); }
+    .entity-map-header-left { display: flex; align-items: center; gap: 8px; }
+    .entity-map-title {
+      font-size: 0.78rem; font-weight: 600; text-transform: uppercase;
+      letter-spacing: 0.05em; color: var(--text-muted);
+    }
+    .entity-map-badge {
+      font-size: 0.7rem; font-weight: 700; padding: 2px 8px; border-radius: 10px;
+      background: var(--accent); color: white;
+      font-family: 'JetBrains Mono', monospace;
+    }
+    .toggle-icon { color: var(--text-muted); font-size: 0.75rem; transition: transform var(--transition); }
+    #entity-map-body {
+      max-height: 0; overflow: hidden; transition: max-height 0.35s ease, padding 0.35s ease;
+      padding: 0 16px;
+    }
+    #entity-map-body.expanded {
+      max-height: 600px; overflow-y: auto; padding: 0 16px 16px;
+    }
+    .entity-group { margin-bottom: 12px; }
+    .entity-group:last-child { margin-bottom: 0; }
+    .entity-group-header {
+      font-size: 0.75rem; font-weight: 600; text-transform: uppercase;
+      letter-spacing: 0.04em; margin-bottom: 6px; padding-bottom: 4px;
+      border-bottom: 1px solid var(--border);
+    }
+    .entity-row {
+      display: flex; align-items: center; gap: 10px;
+      padding: 4px 0; font-size: 0.82rem;
+      font-family: 'JetBrains Mono', monospace;
+    }
+    .entity-placeholder { font-weight: 600; }
+    .entity-arrow { color: var(--text-muted); font-size: 0.7rem; }
+    .entity-original { color: var(--text-secondary); }
+    .entity-map-empty { color: var(--text-muted); font-size: 0.82rem; font-style: italic; padding: 8px 0; }
+
+    /* ─── Toast ─────────────────────────────────────────────── */
+    #toast-container {
+      position: fixed; bottom: 24px; right: 24px; z-index: 2000;
+      display: flex; flex-direction: column; gap: 8px;
+    }
+    .toast {
+      display: flex; align-items: center; gap: 8px;
+      padding: 10px 18px; border-radius: var(--radius-sm);
+      background: var(--bg-surface); border: 1px solid var(--border);
+      box-shadow: var(--shadow); font-size: 0.82rem;
+      opacity: 0; transform: translateX(20px);
+      transition: all 0.3s ease;
+    }
+    .toast.visible { opacity: 1; transform: translateX(0); }
+    .toast-success { border-color: rgba(34, 197, 94, 0.3); }
+    .toast-success .toast-icon { color: var(--success); }
+
+    /* ─── Footer ────────────────────────────────────────────── */
+    .footer {
+      text-align: center; padding: 24px 0 0; color: var(--text-muted);
+      font-size: 0.75rem; border-top: 1px solid var(--border); margin-top: 24px;
+    }
+    .footer a { color: var(--accent); text-decoration: none; }
+    .footer a:hover { text-decoration: underline; }
+
+    /* ─── Scrollbar ─────────────────────────────────────────── */
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <!-- Header -->
+    <header class="header">
+      <div class="header-left">
+        <div class="logo">🛡️</div>
+        <div>
+          <div class="header-title">Text Anonymizer</div>
+          <div class="header-subtitle">Scrub sensitive data before sharing with AI tools</div>
+        </div>
+      </div>
+      <div class="trust-badge">
+        <span class="trust-dot"></span>
+        100% client-side — no data leaves your browser
+      </div>
+    </header>
+
+    <!-- Toolbar -->
+    <div class="toolbar">
+      <div class="toolbar-left">
+        <div class="toggle-group">
+          <label class="toggle-switch">
+            <input type="checkbox" id="aggressive-toggle" checked>
+            <span class="toggle-slider"></span>
+          </label>
+          <span>Aggressive mode</span>
+        </div>
+      </div>
+      <div class="toolbar-right">
+        <span class="char-count" id="char-count">0 characters</span>
+      </div>
+    </div>
+
+    <!-- Editor Panes -->
+    <div class="editor-grid">
+      <!-- Input Pane -->
+      <div class="pane">
+        <div class="pane-header">
+          <span><span class="pane-header-icon">📝</span>Input — Paste your text</span>
+        </div>
+        <div class="pane-body">
+          <textarea id="input-text"
+            placeholder="Paste your sensitive text here...&#10;&#10;The anonymizer will automatically detect and replace:&#10;• Names, organizations, locations&#10;• Email addresses, phone numbers&#10;• IBANs, credit card numbers&#10;• Dates, addresses, IP addresses&#10;• Custom corporate terms&#10;&#10;Try it — paste an email, a contract snippet, or meeting notes."
+            spellcheck="false" autocomplete="off"></textarea>
+        </div>
+      </div>
+
+      <!-- Output Pane -->
+      <div class="pane">
+        <div class="pane-header">
+          <span><span class="pane-header-icon">🔒</span>Anonymized Output</span>
+        </div>
+        <div class="pane-body">
+          <div id="output-placeholder">
+            <span class="placeholder-icon">🔒</span>
+            <span>Anonymized text will appear here</span>
+            <span style="font-size: 0.75rem; color: var(--text-muted);">Hover over highlighted tags to see what was replaced</span>
+          </div>
+          <div id="output-display"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Action Buttons -->
+    <div class="actions">
+      <div class="actions-left">
+        <button class="btn btn-primary" id="anonymize-btn">
+          <span>🔍</span>
+          <span class="btn-text">Anonymize</span>
+          <span class="kbd">⌘↵</span>
+        </button>
+        <button class="btn btn-secondary btn-danger" id="clear-btn">
+          <span>✕</span> Clear
+        </button>
+      </div>
+      <div class="actions-right">
+        <button class="btn btn-secondary btn-copy" id="copy-btn" disabled>
+          <span>📋</span>
+          <span>Copy Safe Text</span>
+          <span class="kbd">⌘⇧C</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Stats Bar -->
+    <div class="stats-section">
+      <div class="stats-section-title">Detection Summary</div>
+      <div id="stats-bar"></div>
+    </div>
+
+    <!-- Entity Map -->
+    <div class="entity-map" id="entity-map-section">
+      <div class="entity-map-header" id="entity-map-toggle">
+        <div class="entity-map-header-left">
+          <span class="entity-map-title">🗺️ Entity Map</span>
+          <span class="entity-map-badge" id="entity-map-count">0</span>
+        </div>
+        <span class="toggle-icon">▶</span>
+      </div>
+      <div id="entity-map-body">
+        <div class="entity-map-empty">No entities detected</div>
+      </div>
+    </div>
+
+    <!-- Footer -->
+    <div class="footer">
+      Text Anonymizer MVP — All processing runs locally in your browser. No data is transmitted, stored, or logged.
+    </div>
+  </div>
+
+  <!-- Toast container -->
+  <div id="toast-container"></div>
+
+  <!-- Scripts -->
+  <script src="https://unpkg.com/compromise@14.14.3/builds/compromise.min.js"></script>
+  <script src="config.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
