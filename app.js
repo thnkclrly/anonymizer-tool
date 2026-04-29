@@ -94,6 +94,9 @@ class AnonymizationEngine {
       this._detectAggressivePatterns(inputText, replacements);
     }
 
+    // ── Layer 2c: Dictionary-based person names ──
+    this._detectDictionaryNames(inputText, replacements);
+
     // ── Layer 3: NLP entities ──
     this._detectNLPEntities(inputText, replacements);
 
@@ -206,6 +209,74 @@ class AnonymizationEngine {
           category: "FINANCIAL",
           priority: 2,
         });
+      }
+    }
+  }
+
+  /**
+   * Layer 2c: Dictionary-based multilingual person name detection.
+   *
+   * Checks each capitalized word against a curated international name set.
+   * Unambiguous names are always flagged. Ambiguous names (which double as
+   * common English words) are only flagged when adjacent to another
+   * capitalized word (surname heuristic).
+   */
+  _detectDictionaryNames(text, replacements) {
+    if (typeof PERSON_NAMES === "undefined") {
+      console.warn("Name dictionary not loaded — skipping dictionary detection");
+      return;
+    }
+
+    // Match capitalized words, including Unicode letters (ø, ł, ś, etc.)
+    const wordRegex = /\b([A-ZÀ-ÖØ-Þ][a-zA-ZÀ-ÖØ-öø-ÿĀ-žŁłŚśŹźŻż'\-]{1,})\b/g;
+    let match;
+
+    while ((match = wordRegex.exec(text)) !== null) {
+      const word = match[1];
+
+      // Normalize to Title Case for lookup
+      const normalized = word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
+
+      // Skip if this position is already covered by a higher-priority replacement
+      const start = match.index;
+      const end = match.index + word.length;
+      const alreadyCovered = replacements.some(
+        (r) => r.priority < 2.5 && r.start <= start && r.end >= end
+      );
+      if (alreadyCovered) continue;
+
+      if (PERSON_NAMES.has(normalized)) {
+        // Unambiguous name — always flag
+        const placeholder = this.getPlaceholder(word, "PERSON");
+        replacements.push({
+          start,
+          end,
+          original: word,
+          placeholder,
+          category: "PERSON",
+          priority: 2.5,
+        });
+      } else if (typeof AMBIGUOUS_NAMES !== "undefined" && AMBIGUOUS_NAMES.has(normalized)) {
+        // Ambiguous name — only flag if adjacent to another capitalized word
+        const beforeContext = text.substring(Math.max(0, start - 30), start);
+        const afterContext = text.substring(end, Math.min(text.length, end + 30));
+
+        // Check if preceded by a capitalized word (e.g. surname before)
+        const precededByName = /[A-ZÀ-ÖØ-Þ][a-zA-ZÀ-ÖØ-öø-ÿĀ-žŁłŚśŹźŻż'\-]+\s+$/.test(beforeContext);
+        // Check if followed by a capitalized word (e.g. surname after)
+        const followedByName = /^\s+[A-ZÀ-ÖØ-Þ][a-zA-ZÀ-ÖØ-öø-ÿĀ-žŁłŚśŹźŻż'\-]+/.test(afterContext);
+
+        if (precededByName || followedByName) {
+          const placeholder = this.getPlaceholder(word, "PERSON");
+          replacements.push({
+            start,
+            end,
+            original: word,
+            placeholder,
+            category: "PERSON",
+            priority: 2.5,
+          });
+        }
       }
     }
   }
